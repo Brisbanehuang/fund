@@ -21,7 +21,18 @@ def get_fund_info(fund_code):
             'fund_company': '未获取到',
             'fund_type': '未获取到',
             'fund_code': fund_code,
-            'is_money_fund': False
+            'is_money_fund': False,
+            
+            # 新增字段初始化
+            'fund_manager': '未获取到',
+            'fund_manager_id': '未获取到',
+            'is_buy': False,
+            'min_purchase': 0,
+            'fund_short_name': '未获取到',
+            'fund_company_id': '未获取到',
+            'other_name': '',
+            'update_date': '',
+            'investment_themes': []
         }
         
         headers = {
@@ -66,15 +77,44 @@ def get_fund_info(fund_code):
                         if item['CODE'] == fund_code:
                             if fund_info['fund_name'] == '未获取到':
                                 fund_info['fund_name'] = item['NAME']
-                            if fund_info['fund_company'] == '未获取到':
-                                fund_info['fund_company'] = item['FundBaseInfo']['JJGS']
-                            if fund_info['fund_type'] == '未获取到':
-                                # 处理基金类型编码
-                                fund_type_code = item['FundBaseInfo'].get('FUNDTYPE', '')
-                                fund_type = map_fund_type_code(fund_type_code)
-                                if fund_type != '未知类型':
+                            
+                            # 添加新的字段
+                            base_info = item.get('FundBaseInfo', {})
+                            if base_info:
+                                # 基金经理信息
+                                fund_info['fund_manager'] = base_info.get('JJJL', '未获取到')
+                                fund_info['fund_manager_id'] = base_info.get('JJJLID', '未获取到')
+                                
+                                # 申购相关信息
+                                fund_info['is_buy'] = base_info.get('ISBUY', '0') == '1'
+                                fund_info['min_purchase'] = base_info.get('MINSG', 0)
+                                
+                                # 其他基础信息
+                                fund_info['fund_short_name'] = base_info.get('SHORTNAME', '未获取到')
+                                fund_info['fund_company_id'] = base_info.get('JJGSID', '未获取到')
+                                fund_info['other_name'] = base_info.get('OTHERNAME', '')
+                                fund_info['update_date'] = base_info.get('FSRQ', '')
+                                
+                                # 直接使用FTYPE作为基金类型
+                                if fund_info['fund_type'] == '未获取到':
+                                    fund_type = base_info.get('FTYPE', '未知类型')
                                     fund_info['fund_type'] = fund_type
+                                    # 更新is_money_fund标志，检查是否为货币型或保本型
                                     fund_info['is_money_fund'] = '货币型' in fund_type or '保本型' in fund_type
+                                
+                                if fund_info['fund_company'] == '未获取到':
+                                    fund_info['fund_company'] = base_info.get('JJGS', '未获取到')
+                            
+                            # 添加主题投资信息
+                            if 'ZTJJInfo' in item and item['ZTJJInfo']:
+                                themes = []
+                                for theme in item['ZTJJInfo']:
+                                    themes.append({
+                                        'type': theme.get('TTYPE', ''),
+                                        'name': theme.get('TTYPENAME', '')
+                                    })
+                                fund_info['investment_themes'] = themes
+                            
                             break
             except Exception as e:
                 print(f"解析搜索API数据时发生错误: {str(e)}")

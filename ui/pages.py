@@ -32,18 +32,19 @@ def show_fund_detail_popup(fund_code):
     st.session_state.detail_fund_code = fund_code
     st.session_state.fund_data = None
     
-    # 如果是自选基金，更新其更新时间
-    if fund_code in st.session_state.favorite_funds:
-        # 从缓存文件中读取基金数据的最后更新时间
-        meta_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data/fund_cache", f"{fund_code}_meta.json")
-        if os.path.exists(meta_file):
-            try:
-                with open(meta_file, 'r') as f:
-                    meta_data = json.load(f)
-                    st.session_state.favorite_funds[fund_code]['last_update'] = meta_data.get('last_update')
-                    save_favorite_funds()
-            except Exception as e:
-                print(f"读取基金缓存元数据时发生错误: {str(e)}")
+    # 更新基金信息（无论是否为自选基金）
+    try:
+        # 获取最新的基金信息
+        fund_info = get_fund_info(fund_code)
+        last_update_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        
+        # 如果是自选基金，更新其信息
+        if fund_code in st.session_state.favorite_funds:
+            st.session_state.favorite_funds[fund_code]['fund_info'] = fund_info
+            st.session_state.favorite_funds[fund_code]['last_update'] = last_update_time
+            save_favorite_funds()
+    except Exception as e:
+        print(f"更新基金信息时发生错误: {str(e)}")
     
     st.rerun()
 
@@ -87,24 +88,21 @@ def fund_query_page():
             else:
                 if st.button("加入自选", use_container_width=True):
                     if fund_code and st.session_state.fund_data is not None:
-                        # 从缓存文件中读取基金数据的最后更新时间
-                        meta_file = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data/fund_cache", f"{fund_code}_meta.json")
-                        last_update_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')  # 默认值
-                        if os.path.exists(meta_file):
-                            try:
-                                with open(meta_file, 'r') as f:
-                                    meta_data = json.load(f)
-                                    last_update_time = meta_data.get('last_update', last_update_time)
-                            except Exception as e:
-                                print(f"读取基金缓存元数据时发生错误: {str(e)}")
-                        
-                        st.session_state.favorite_funds[fund_code] = {
-                            'fund_info': st.session_state.fund_data['fund_info'],
-                            'last_update': last_update_time
-                        }
-                        save_favorite_funds()
-                        st.session_state.show_toast = {"message": f"基金 {fund_code} 已添加到自选！", "icon": "✅"}
-                        st.rerun()
+                        # 重新获取最新的基金信息，确保包含所有新字段
+                        try:
+                            fund_info = get_fund_info(fund_code)
+                            last_update_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            
+                            # 保存到自选基金
+                            st.session_state.favorite_funds[fund_code] = {
+                                'fund_info': fund_info,
+                                'last_update': last_update_time
+                            }
+                            save_favorite_funds()
+                            st.session_state.show_toast = {"message": f"基金 {fund_code} 已添加到自选！", "icon": "✅"}
+                            st.rerun()
+                        except Exception as e:
+                            st.error(f"添加自选基金时发生错误: {str(e)}")
                     elif fund_code:
                         st.warning('请先点击"开始分析"按钮获取基金数据')
                     else:
@@ -144,16 +142,53 @@ def fund_query_page():
     elif not st.session_state.fund_code:
         st.info("👆 请输入基金代码并点击'开始分析'按钮开始分析")
 
+def refresh_favorite_funds():
+    """刷新所有自选基金的数据"""
+    if not st.session_state.favorite_funds:
+        return
+    
+    with st.spinner("正在刷新自选基金数据..."):
+        updated_funds = {}
+        for fund_code in st.session_state.favorite_funds:
+            try:
+                # 获取最新的基金信息
+                fund_info = get_fund_info(fund_code)
+                # 保留上次更新时间
+                last_update = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                
+                # 更新基金信息
+                updated_funds[fund_code] = {
+                    'fund_info': fund_info,
+                    'last_update': last_update
+                }
+            except Exception as e:
+                print(f"刷新基金 {fund_code} 时出错: {str(e)}")
+                # 保留原有数据
+                updated_funds[fund_code] = st.session_state.favorite_funds[fund_code]
+        
+        # 更新session_state中的数据
+        st.session_state.favorite_funds = updated_funds
+        # 保存到文件
+        save_favorite_funds()
+
 def favorite_funds_page():
     """自选基金页面"""
     st.session_state.current_view = "favorite_funds"
     st.markdown('<h1 class="main-header">自选基金</h1>', unsafe_allow_html=True)
     
+    # 添加刷新按钮
+    col1, col2 = st.columns([6, 1])
+    with col2:
+        if st.button("刷新数据", use_container_width=True):
+            refresh_favorite_funds()
+            st.rerun()
+    
     if not st.session_state.favorite_funds:
         st.info("您还没有添加任何自选基金，请在基金查询页面添加。")
     else:
         # 显示自选基金列表
-        st.markdown("### 我的自选基金")
+        with col1:
+            st.markdown("### 我的自选基金")
         
         # 创建多列布局
         cols_per_row = 3
@@ -173,12 +208,21 @@ def favorite_funds_page():
                             elif '（' in fund_name:
                                 fund_name = fund_name.split('（')[0]
                             
+                            # 获取基金相关信息
+                            fund_manager = fund_data['fund_info'].get('fund_manager', '未知')
+                            fund_type = fund_data['fund_info'].get('fund_type', '未知')
+                            is_buy = '可申购' if fund_data['fund_info'].get('is_buy', False) else '暂停申购'
+                            
                             st.markdown(f"""
                             <div class="fund-card">
                                 <h4 title="{fund_name}">{fund_name}</h4>
                                 <div class="info-row">
                                     <span>代码：{fund_code}</span>
-                                    <span>{fund_data['fund_info'].get('fund_type', '未知')}</span>
+                                    <span>{fund_type}</span>
+                                </div>
+                                <div class="info-row">
+                                    <span>基金经理：{fund_manager}</span>
+                                    <span>{is_buy}</span>
                                 </div>
                                 <p class="update-time">更新时间：{fund_data['last_update']}</p>
                             </div>

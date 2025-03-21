@@ -121,9 +121,37 @@ def display_fund_analysis(df, fund_info, show_header=True):
             fund_name = fund_name.split('（')[0]
         st.markdown(f"**基金名称：** {fund_name}")
         st.markdown(f"**基金公司：** {fund_info.get('fund_company', '未获取到')}")
+        st.markdown(f"**基金经理：** {fund_info.get('fund_manager', '未获取到')}")
     with col2:
         st.markdown(f"**基金代码：** {fund_info.get('fund_code', '未获取到')}")
         st.markdown(f"**基金类型：** {fund_info.get('fund_type', '未获取到')}")
+        purchase_status = "可申购" if fund_info.get('is_buy', False) else "暂停申购"
+        st.markdown(f"**申购状态：** {purchase_status}")
+        st.markdown(f"**最小申购金额：** {fund_info.get('min_purchase', 0)}元")
+    
+    # 添加更多信息部分
+    with st.expander("更多基金信息", expanded=False):
+        # 显示投资主题信息（如果有）
+        themes = fund_info.get('investment_themes', [])
+        if themes:
+            st.markdown("**投资主题：**")
+            theme_str = ", ".join([theme.get('name', '') for theme in themes])
+            st.markdown(f"{theme_str}")
+        
+        # 显示其他名称（如果有）
+        other_name = fund_info.get('other_name', '')
+        if other_name:
+            st.markdown(f"**别名/其他名称：** {other_name}")
+        
+        # 显示最近更新日期（如果有）
+        update_date = fund_info.get('update_date', '')
+        if update_date:
+            st.markdown(f"**数据更新日期：** {update_date}")
+        
+        # 显示基金公司ID（如果有）
+        fund_company_id = fund_info.get('fund_company_id', '')
+        if fund_company_id:
+            st.markdown(f"**基金公司ID：** {fund_company_id}")
     
     # 显示基金数据分析结果
     st.markdown('<h2 class="section-header">净值走势</h2>', unsafe_allow_html=True)
