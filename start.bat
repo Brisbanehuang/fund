@@ -33,7 +33,7 @@ echo 新功能更新:
 echo 1. 非货币基金现在显示累计净值走势图
 echo 2. 投资区间分析新增两个图表:
 echo    a) 区间收益率曲线图
-echo    b) 区间单位净值曲线图
+echo    b) 净值区间曲线
 
 streamlit run main.py
 

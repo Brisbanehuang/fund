@@ -239,9 +239,30 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
         cached_data, is_today = get_cached_fund_data(fund_code)
         
         if cached_data is not None:
-            if is_today:
-                # 如果是今天的数据，直接返回
+            # 获取基金类型信息，判断是否为货币基金
+            fund_info = get_fund_info(fund_code)
+            is_money_fund = fund_info.get('is_money_fund', False)
+            
+            # 检查缓存数据是否包含累计净值（对于非货币基金）
+            has_acc_nav = 'acc_nav' in cached_data.columns
+            needs_acc_nav = not is_money_fund  # 非货币基金需要累计净值
+            
+            # 读取元数据信息
+            meta_file = os.path.join(CACHE_DIR, f"{fund_code}_meta.json")
+            with open(meta_file, 'r') as f:
+                meta_data = json.load(f)
+            
+            if is_today and (has_acc_nav or not needs_acc_nav):
+                # 如果是今天的数据且包含所需的累计净值数据(或者是货币基金不需要累计净值)，直接返回
+                print(f"使用今日已更新的缓存数据（最后更新：{meta_data['last_update']}）")
                 return cached_data
+            elif is_today and needs_acc_nav and not has_acc_nav:
+                # 如果是今天的数据但非货币基金缺少累计净值，需要重新获取
+                print(f"缓存数据缺少累计净值，重新获取完整数据...")
+                df = fetch_fund_data_from_api(fund_code, None, None)
+                if not df.empty:
+                    save_fund_data_to_cache(fund_code, df)
+                return df
             
             # 获取缓存的最后一个日期
             last_cache_date = cached_data['date'].max()
@@ -249,10 +270,7 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
             
             # 如果缓存数据不是最新的，获取增量更新
             if current_date.date() > last_cache_date.date():
-                # 检查元数据中的最后更新时间
-                meta_file = os.path.join(CACHE_DIR, f"{fund_code}_meta.json")
-                with open(meta_file, 'r') as f:
-                    meta_data = json.load(f)
+                # 获取元数据里的最后更新时间
                 last_update = pd.to_datetime(meta_data['last_update'])
                 current_time = pd.to_datetime(datetime.datetime.now())
                 
@@ -264,7 +282,7 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
                 is_weekend = today.weekday() >= 5  # 周六和周日
                 
                 # 判断是否需要更新
-                if hours_diff < 24 and (is_weekend or last_cache_date.date() == pd.to_datetime(end_date).date()):
+                if hours_diff < 24 and (is_weekend or last_cache_date.date() == pd.to_datetime(end_date).date()) and (has_acc_nav or not needs_acc_nav):
                     print(f"缓存数据已在24小时内更新过（{last_update.strftime('%Y-%m-%d %H:%M:%S')}），无需频繁更新")
                     df = cached_data
                     return df
@@ -279,7 +297,7 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
                     includes_acc_nav = 'acc_nav' in new_data.columns
                     
                     # 判断缓存数据是否包含累计净值，如果不包含但新数据中有，则需要重新获取完整数据
-                    if includes_acc_nav and 'acc_nav' not in cached_data.columns:
+                    if includes_acc_nav and not has_acc_nav and needs_acc_nav:
                         print("检测到新数据包含累计净值而缓存数据不包含，重新获取完整数据...")
                         df = fetch_fund_data_from_api(fund_code, None, None)
                         if not df.empty:
@@ -296,6 +314,14 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
                     print("没有新数据需要更新")
                     df = cached_data
             else:
+                # 即使缓存数据是最新的，如果是非货币基金但缺少累计净值，也需要重新获取
+                if needs_acc_nav and not has_acc_nav:
+                    print("缓存数据缺少累计净值，重新获取完整数据...")
+                    df = fetch_fund_data_from_api(fund_code, None, None)
+                    if not df.empty:
+                        save_fund_data_to_cache(fund_code, df)
+                    return df
+                
                 print("缓存数据已是最新，无需更新")
                 df = cached_data
         else:
