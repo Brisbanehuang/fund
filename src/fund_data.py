@@ -86,7 +86,16 @@ def get_fund_info(fund_code):
                                 fund_info['fund_manager_id'] = base_info.get('JJJLID', '未获取到')
                                 
                                 # 申购相关信息
-                                fund_info['is_buy'] = base_info.get('ISBUY', '0') == '1'
+                                isbuy_value = base_info.get('ISBUY', '')
+                                # 修正申购状态的判断逻辑：
+                                # 1为可申购，2为暂停申购，空字符串或其他值为未知
+                                if isbuy_value == '1':
+                                    fund_info['is_buy'] = True
+                                elif isbuy_value == '2' or isbuy_value == '0':
+                                    fund_info['is_buy'] = False
+                                else:
+                                    fund_info['is_buy'] = None
+                                
                                 fund_info['min_purchase'] = base_info.get('MINSG', 0)
                                 
                                 # 其他基础信息

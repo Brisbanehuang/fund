@@ -11,6 +11,9 @@ from ui.components import display_fund_analysis
 # 使用绝对路径确保文件保存在根目录下
 FAVORITE_FUNDS_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "favorite_funds.json")
 
+# 导入缓存目录常量
+from src.fund_data import CACHE_DIR
+
 def load_favorite_funds():
     """从本地文件加载自选基金数据"""
     if os.path.exists(FAVORITE_FUNDS_FILE):
@@ -149,11 +152,21 @@ def refresh_favorite_funds():
     
     with st.spinner("正在刷新自选基金数据..."):
         updated_funds = {}
-        for fund_code in st.session_state.favorite_funds:
+        total_funds = len(st.session_state.favorite_funds)
+        progress_bar = st.progress(0)
+        
+        for i, fund_code in enumerate(st.session_state.favorite_funds):
             try:
+                st.write(f"正在更新 ({i+1}/{total_funds}): {fund_code}")
+                
                 # 获取最新的基金信息
                 fund_info = get_fund_info(fund_code)
-                # 保留上次更新时间
+                
+                # 获取最新的净值数据（依赖缓存智能更新机制）
+                # 这会自动检查缓存并只获取新数据
+                df = get_fund_data(fund_code)
+                
+                # 保存更新时间
                 last_update = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 
                 # 更新基金信息
@@ -161,15 +174,25 @@ def refresh_favorite_funds():
                     'fund_info': fund_info,
                     'last_update': last_update
                 }
+                
+                # 更新进度
+                progress_bar.progress((i + 1) / total_funds)
+                
             except Exception as e:
-                print(f"刷新基金 {fund_code} 时出错: {str(e)}")
+                st.error(f"刷新基金 {fund_code} 时出错: {str(e)}")
                 # 保留原有数据
                 updated_funds[fund_code] = st.session_state.favorite_funds[fund_code]
+                # 更新进度
+                progress_bar.progress((i + 1) / total_funds)
+        
+        # 完成进度条
+        progress_bar.progress(1.0)
         
         # 更新session_state中的数据
         st.session_state.favorite_funds = updated_funds
         # 保存到文件
         save_favorite_funds()
+        st.success("自选基金数据更新完成！")
 
 def favorite_funds_page():
     """自选基金页面"""
@@ -211,7 +234,15 @@ def favorite_funds_page():
                             # 获取基金相关信息
                             fund_manager = fund_data['fund_info'].get('fund_manager', '未知')
                             fund_type = fund_data['fund_info'].get('fund_type', '未知')
-                            is_buy = '可申购' if fund_data['fund_info'].get('is_buy', False) else '暂停申购'
+                            
+                            # 修改申购状态显示逻辑
+                            is_buy_status = fund_data['fund_info'].get('is_buy')
+                            if is_buy_status is True:
+                                is_buy = "可申购"
+                            elif is_buy_status is False:
+                                is_buy = "暂停申购"
+                            else:
+                                is_buy = "未知"
                             
                             st.markdown(f"""
                             <div class="fund-card">

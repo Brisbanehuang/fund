@@ -125,7 +125,16 @@ def display_fund_analysis(df, fund_info, show_header=True):
     with col2:
         st.markdown(f"**基金代码：** {fund_info.get('fund_code', '未获取到')}")
         st.markdown(f"**基金类型：** {fund_info.get('fund_type', '未获取到')}")
-        purchase_status = "可申购" if fund_info.get('is_buy', False) else "暂停申购"
+        
+        # 修改申购状态显示逻辑
+        is_buy = fund_info.get('is_buy')
+        if is_buy is True:
+            purchase_status = "可申购"
+        elif is_buy is False:
+            purchase_status = "暂停申购"
+        else:
+            purchase_status = "未知"
+            
         st.markdown(f"**申购状态：** {purchase_status}")
         st.markdown(f"**最小申购金额：** {fund_info.get('min_purchase', 0)}元")
     
