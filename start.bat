@@ -29,6 +29,11 @@ echo.
 echo 正在启动基金分析工具...
 echo 请稍候，应用程序窗口即将打开...
 echo.
+echo 新功能更新:
+echo 1. 非货币基金现在显示累计净值走势图
+echo 2. 投资区间分析新增两个图表:
+echo    a) 区间收益率曲线图
+echo    b) 区间单位净值曲线图
 
 streamlit run main.py
 

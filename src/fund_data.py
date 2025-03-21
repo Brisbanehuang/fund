@@ -275,6 +275,17 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
                 new_data = fetch_fund_data_from_api(fund_code, increment_start, end_date)
                 
                 if not new_data.empty:
+                    # 判断新数据中是否包含累计净值
+                    includes_acc_nav = 'acc_nav' in new_data.columns
+                    
+                    # 判断缓存数据是否包含累计净值，如果不包含但新数据中有，则需要重新获取完整数据
+                    if includes_acc_nav and 'acc_nav' not in cached_data.columns:
+                        print("检测到新数据包含累计净值而缓存数据不包含，重新获取完整数据...")
+                        df = fetch_fund_data_from_api(fund_code, None, None)
+                        if not df.empty:
+                            save_fund_data_to_cache(fund_code, df)
+                        return df
+                    
                     # 合并新旧数据
                     df = pd.concat([cached_data, new_data], ignore_index=True)
                     df = df.drop_duplicates(subset=['date']).sort_values('date')
@@ -296,6 +307,9 @@ def get_fund_data(fund_code, start_date=None, end_date=None, fill_missing=False)
         
         # 填充非交易日数据
         if fill_missing and not df.empty:
+            # 检查是否存在acc_nav列
+            has_acc_nav = 'acc_nav' in df.columns
+            
             date_range = pd.date_range(start=df['date'].min(), end=df['date'].max(), freq='D')
             df = df.set_index('date').reindex(date_range)
             df = df.ffill()  # 使用ffill()替代fillna(method='ffill')
@@ -376,8 +390,17 @@ def fetch_fund_data_from_api(fund_code, start_date, end_date):
             df['nav'] = df['nav'].replace({'\\*': '', ',': ''}, regex=True)  # 移除星号和逗号
             df['nav'] = pd.to_numeric(df['nav'], errors='coerce')
             
+            # 转换累计净值列为数值类型（对于非货币基金）
+            if not is_money_fund and 'acc_nav' in df.columns:
+                df['acc_nav'] = df['acc_nav'].replace({'\\*': '', ',': ''}, regex=True)
+                df['acc_nav'] = pd.to_numeric(df['acc_nav'], errors='coerce')
+            
             # 合并数据
-            all_data = pd.concat([all_data, df[['date', 'nav']]], ignore_index=True)
+            if is_money_fund:
+                all_data = pd.concat([all_data, df[['date', 'nav']]], ignore_index=True)
+            else:
+                # 对于非货币基金，保存单位净值和累计净值
+                all_data = pd.concat([all_data, df[['date', 'nav', 'acc_nav']]], ignore_index=True)
             
             print(f"第{page}页: 获取到{len(df)}条数据，最早日期: {df['date'].min().strftime('%Y-%m-%d')}")
             

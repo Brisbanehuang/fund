@@ -187,21 +187,40 @@ def display_fund_analysis(df, fund_info, show_header=True):
             height=500
         )
     else:
-        fig.add_trace(go.Scatter(
-            x=df['date'],
-            y=df['nav'],
-            mode='lines',
-            name='单位净值',
-            line=dict(color='#1f77b4', width=2)
-        ))
-        fig.update_layout(
-            title='基金净值走势图',
-            xaxis_title='日期',
-            yaxis_title='单位净值',
-            hovermode='x unified',
-            showlegend=True,
-            height=500
-        )
+        # 使用累计净值替代单位净值
+        if 'acc_nav' in df.columns and not df['acc_nav'].isna().all():
+            fig.add_trace(go.Scatter(
+                x=df['date'],
+                y=df['acc_nav'],
+                mode='lines',
+                name='累计净值',
+                line=dict(color='#1f77b4', width=2)
+            ))
+            fig.update_layout(
+                title='基金累计净值走势图',
+                xaxis_title='日期',
+                yaxis_title='累计净值',
+                hovermode='x unified',
+                showlegend=True,
+                height=500
+            )
+        else:
+            # 如果没有累计净值数据，则使用单位净值
+            fig.add_trace(go.Scatter(
+                x=df['date'],
+                y=df['nav'],
+                mode='lines',
+                name='单位净值',
+                line=dict(color='#1f77b4', width=2)
+            ))
+            fig.update_layout(
+                title='基金净值走势图 (累计净值数据不可用，显示单位净值)',
+                xaxis_title='日期',
+                yaxis_title='单位净值',
+                hovermode='x unified',
+                showlegend=True,
+                height=500
+            )
     
     # 显示图表
     st.plotly_chart(fig, use_container_width=True)
@@ -331,6 +350,79 @@ def display_fund_analysis(df, fund_info, show_header=True):
     # 获取选定期间的数据
     mask = (df['date'] >= start_date) & (df['date'] <= end_date)
     period_df = df.loc[mask].copy()
+    
+    # 在投资区间信息上方添加两个图表：收益率曲线图和单位净值曲线图
+    if not period_df.empty and start_date <= end_date and not is_money_fund:
+        # 1. 收益率曲线图（从起始日期0%开始，用累计净值计算）
+        if 'acc_nav' in period_df.columns and not period_df['acc_nav'].isna().all():
+            # 计算累计收益率曲线
+            start_acc_nav = period_df['acc_nav'].iloc[0]
+            period_df['return_rate'] = (period_df['acc_nav'] / start_acc_nav - 1) * 100
+            
+            # 绘制收益率曲线图
+            fig_return = go.Figure()
+            fig_return.add_trace(go.Scatter(
+                x=period_df['date'],
+                y=period_df['return_rate'],
+                mode='lines',
+                name='收益率曲线',
+                line=dict(color='#ff7f0e', width=2)
+            ))
+            fig_return.update_layout(
+                title='投资区间收益率曲线',
+                xaxis_title='日期',
+                yaxis_title='收益率(%)',
+                hovermode='x unified',
+                showlegend=True,
+                height=400
+            )
+            # 添加零线以便参考
+            fig_return.add_hline(y=0, line_width=1, line_dash="dash", line_color="gray")
+            st.plotly_chart(fig_return, use_container_width=True)
+        else:
+            # 如果没有累计净值数据，则使用单位净值
+            start_nav = period_df['nav'].iloc[0]
+            period_df['return_rate'] = (period_df['nav'] / start_nav - 1) * 100
+            
+            # 绘制收益率曲线图
+            fig_return = go.Figure()
+            fig_return.add_trace(go.Scatter(
+                x=period_df['date'],
+                y=period_df['return_rate'],
+                mode='lines',
+                name='收益率曲线 (使用单位净值计算)',
+                line=dict(color='#ff7f0e', width=2)
+            ))
+            fig_return.update_layout(
+                title='投资区间收益率曲线 (使用单位净值计算)',
+                xaxis_title='日期',
+                yaxis_title='收益率(%)',
+                hovermode='x unified',
+                showlegend=True,
+                height=400
+            )
+            # 添加零线以便参考
+            fig_return.add_hline(y=0, line_width=1, line_dash="dash", line_color="gray")
+            st.plotly_chart(fig_return, use_container_width=True)
+        
+        # 2. 单位净值曲线图（显示选定区间的单位净值）
+        fig_nav = go.Figure()
+        fig_nav.add_trace(go.Scatter(
+            x=period_df['date'],
+            y=period_df['nav'],
+            mode='lines',
+            name='单位净值',
+            line=dict(color='#2ca02c', width=2)
+        ))
+        fig_nav.update_layout(
+            title='投资区间单位净值曲线',
+            xaxis_title='日期',
+            yaxis_title='单位净值',
+            hovermode='x unified',
+            showlegend=True,
+            height=400
+        )
+        st.plotly_chart(fig_nav, use_container_width=True)
     
     if not period_df.empty and start_date <= end_date:
         # 计算投资天数
