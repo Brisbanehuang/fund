@@ -14,6 +14,7 @@ st.set_page_config(
 # 导入UI模块
 from ui.components import load_css
 from ui.pages import fund_query_page, favorite_funds_page, load_favorite_funds, show_fund_detail_popup
+from ui.portfolio_page import portfolio_page
 from ui.other_pages import fund_compare_page, fund_investment_plan_page, more_features_page
 
 # 加载CSS样式
@@ -52,7 +53,7 @@ st.sidebar.markdown("---")
 # 导航选项
 selected_nav = st.sidebar.radio(
     "功能导航",
-    ["基金查询", "自选基金", "基金比较", "基金投资计划", "待开发"]
+    ["基金查询", "自选基金", "基金持仓", "基金比较", "基金投资计划", "待开发"]
 )
 
 # 处理导航逻辑
@@ -109,6 +110,8 @@ if nav_option == "基金查询":
     fund_query_page()
 elif nav_option == "自选基金":
     favorite_funds_page()
+elif nav_option == "基金持仓":
+    portfolio_page()
 elif nav_option == "基金比较":
     fund_compare_page()
 elif nav_option == "基金投资计划":

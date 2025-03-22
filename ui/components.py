@@ -4,7 +4,9 @@ import pandas as pd
 import numpy as np
 import os
 import json
-from datetime import datetime
+from datetime import datetime, date
+
+from src.fund_data import get_fund_data, get_fund_info
 
 # 自定义CSS样式
 def load_css():
@@ -48,6 +50,16 @@ def load_css():
     .stButton>button {
         width: 100%;
         height: 42px;  /* 与输入框高度保持一致 */
+    }
+    /* 确保查询基金按钮和输入框的高度一致 */
+    .stButton[data-testid*="query_fund_button"]>button {
+        margin-top: 24px;
+        height: 40px !important;
+    }
+    /* 确保输入框和查询按钮水平对齐 */
+    div[data-testid="column"]:has(button[kind="secondaryFormSubmit"][data-testid*="query_fund_button"]) {
+        margin-top: -0px !important;
+        align-self: end;
     }
     .reportview-container {
         background: #f0f2f6;
@@ -101,6 +113,49 @@ def load_css():
         display: flex;
         gap: 0.5rem;
         margin-top: 1rem;
+    }
+    /* 持仓页面特殊样式 */
+    .portfolio-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 1.5rem;
+    }
+    .portfolio-summary {
+        background: #f9f9f9;
+        padding: 1.5rem;
+        border-radius: 8px;
+        margin-bottom: 1.5rem;
+        box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+    }
+    .total-investment,
+    .total-value,
+    .total-profit {
+        font-size: 1.1rem;
+        margin-bottom: 0.5rem;
+    }
+    .total-profit.positive {
+        color: green;
+    }
+    .total-profit.negative {
+        color: red;
+    }
+    .profit-percentage {
+        font-size: 0.9rem;
+        color: #555;
+    }
+    .input-group {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 10px;
+        margin-bottom: 1rem;
+    }
+    .input-group .fund-code-column {
+        flex: 3;
+    }
+    .input-group .query-button-column {
+        flex: 1;
     }
     </style>
     """, unsafe_allow_html=True)
@@ -487,3 +542,508 @@ def display_fund_analysis(df, fund_info, show_header=True):
                         help="最大回撤 = (期间最高点净值 - 期间最低点净值) / 期间最高点净值")
     else:
         st.error("请选择有效的投资区间")
+
+# 基金持仓相关组件
+
+# 持仓数据文件路径
+PORTFOLIO_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "data", "portfolio.json")
+
+def load_portfolio():
+    """从本地文件加载基金持仓数据"""
+    if os.path.exists(PORTFOLIO_FILE):
+        try:
+            with open(PORTFOLIO_FILE, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_portfolio(portfolio_data):
+    """保存基金持仓数据到本地文件"""
+    with open(PORTFOLIO_FILE, 'w', encoding='utf-8') as f:
+        json.dump(portfolio_data, f, ensure_ascii=False, indent=2)
+
+def display_portfolio_summary(portfolio_data):
+    """显示投资组合总体情况"""
+    if not portfolio_data:
+        st.info("您还没有添加任何基金持仓，请点击\"添加基金\"按钮开始构建您的投资组合。")
+        return
+    
+    # 计算总体情况
+    total_investment = sum(item.get('amount', 0) for item in portfolio_data)
+    total_current_value = sum(item.get('current_value', 0) for item in portfolio_data)
+    total_profit = total_current_value - total_investment
+    profit_percentage = (total_profit / total_investment * 100) if total_investment > 0 else 0
+    
+    # 显示总体情况
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.metric(
+            label="总投资金额", 
+            value=f"¥{total_investment:.2f}",
+        )
+    with col2:
+        st.metric(
+            label="当前总价值", 
+            value=f"¥{total_current_value:.2f}",
+        )
+    with col3:
+        profit_color = "normal" if total_profit >= 0 else "inverse"
+        profit_sign = "+" if total_profit >= 0 else ""
+        st.metric(
+            label="总盈亏", 
+            value=f"¥{total_profit:.2f}",
+            delta=f"{profit_sign}{profit_percentage:.2f}%",
+            delta_color=profit_color
+        )
+
+def display_fund_card(fund_item, index, refresh_callback):
+    """显示单个基金持仓卡片"""
+    with st.container():
+        st.markdown(f"""
+        <div class="fund-card">
+            <h4>{fund_item.get('fund_name', '未知基金')} ({fund_item.get('fund_code', '')})</h4>
+            <div class="info-row">
+                <div>购买金额: ¥{fund_item.get('amount', 0):.2f}</div>
+                <div>购买日期: {fund_item.get('purchase_date', '')}</div>
+            </div>
+            <div class="info-row">
+                <div>持有份额: {fund_item.get('shares', 0):.2f}</div>
+                <div>成本单价: {fund_item.get('cost_per_unit', 0):.4f}</div>
+            </div>
+            <div class="info-row">
+                <div>当前净值: {fund_item.get('net_value', 0):.4f}</div>
+                <div>当前价值: ¥{fund_item.get('current_value', 0):.2f}</div>
+            </div>
+            <div class="info-row">
+                <div style="color: {'green' if fund_item.get('profit', 0) >= 0 else 'red'}">
+                    盈亏: {'+'if fund_item.get('profit', 0) >= 0 else ''}{fund_item.get('profit', 0):.2f} 
+                    ({'+'if fund_item.get('profit_percentage', 0) >= 0 else ''}{fund_item.get('profit_percentage', 0):.2f}%)
+                </div>
+                <div class="update-time">上次更新: {fund_item.get('update_time', '未更新')}</div>
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("编辑", key=f"edit_{index}", use_container_width=True):
+                st.session_state.edit_fund_index = index
+                st.session_state.show_edit_form = True
+                st.rerun()
+        with col2:
+            if st.button("删除", key=f"delete_{index}", use_container_width=True):
+                if 'portfolio' in st.session_state:
+                    st.session_state.portfolio.pop(index)
+                    save_portfolio(st.session_state.portfolio)
+                    refresh_callback()
+                    st.rerun()
+
+def add_edit_fund_form(is_edit=False, fund_index=None, fund_code=None, skip_input=False):
+    """添加或编辑基金表单"""
+    # 初始化表单数据和会话状态
+    fund_data = {}
+    if is_edit and fund_index is not None and 'portfolio' in st.session_state:
+        if 0 <= fund_index < len(st.session_state.portfolio):
+            fund_data = st.session_state.portfolio[fund_index]
+    
+    # 初始化表单的会话状态
+    if 'form_fund_code' not in st.session_state:
+        st.session_state.form_fund_code = fund_data.get('fund_code', '')
+    if 'form_purchase_amount' not in st.session_state:
+        st.session_state.form_purchase_amount = float(fund_data.get('amount', 1000.0))
+    if 'form_purchase_date' not in st.session_state:
+        default_date = datetime.strptime(fund_data.get('purchase_date', datetime.now().strftime('%Y-%m-%d')), '%Y-%m-%d').date() if 'purchase_date' in fund_data else datetime.now().date()
+        st.session_state.form_purchase_date = default_date
+    if 'form_cost_per_unit' not in st.session_state:
+        st.session_state.form_cost_per_unit = float(fund_data.get('cost_per_unit', 0))
+    if 'form_date_confirmed' not in st.session_state:
+        st.session_state.form_date_confirmed = False
+    if 'temp_fund_info' not in st.session_state and fund_code:
+        # 如果有fund_code但没有缓存的fund_info，尝试获取
+        try:
+            fund_info = get_fund_info(fund_code)
+            if fund_info and 'fund_name' in fund_info:
+                st.session_state.temp_fund_info = fund_info
+        except:
+            pass
+    
+    # 如果提供了fund_code参数，则使用它
+    if fund_code:
+        st.session_state.form_fund_code = fund_code
+    
+    # 标题已从调用者处添加，这里不再需要
+    if not skip_input:
+        # 表单标题
+        st.markdown(f"## {'编辑' if is_edit else '添加'}基金持仓")
+        
+        # 定义回调函数保存表单字段状态
+        def on_fund_code_change():
+            st.session_state.form_fund_code = st.session_state.portfolio_fund_code
+        
+        # 基金代码输入和查询
+        col1, col2 = st.columns([3, 1])
+        with col1:
+            fund_code = st.text_input(
+                "基金代码", 
+                value=st.session_state.form_fund_code,
+                placeholder="请输入6位基金代码",
+                key="portfolio_fund_code",
+                on_change=on_fund_code_change
+            )
+        with col2:
+            query_button = st.button("查询基金", key="query_fund_button", use_container_width=True)
+    else:
+        # 使用预先提供的fund_code或session_state中的值
+        fund_code = st.session_state.form_fund_code
+        query_button = False  # 不自动触发查询，因为已在portfolio_page中处理
+    
+    # 定义回调函数保存表单字段状态
+    def on_purchase_amount_change():
+        st.session_state.form_purchase_amount = st.session_state.portfolio_purchase_amount
+    
+    def on_purchase_date_change():
+        st.session_state.form_purchase_date = st.session_state.portfolio_purchase_date
+        # 日期变更时，重置确认状态
+        st.session_state.form_date_confirmed = False
+    
+    def on_cost_per_unit_change():
+        st.session_state.form_cost_per_unit = st.session_state.portfolio_cost_per_unit
+        
+    fund_info = None
+    is_valid_fund = False
+    
+    # 查询基金信息
+    if query_button and fund_code:
+        try:
+            with st.spinner("正在查询基金信息..."):
+                # 保存用户已输入的值到会话状态
+                st.session_state.form_fund_code = fund_code
+                
+                fund_info = get_fund_info(fund_code)
+                if fund_info and 'fund_name' in fund_info:
+                    is_valid_fund = True
+                    st.session_state.temp_fund_info = fund_info
+                    # 确保查询阶段被标记为完成
+                    st.session_state.query_stage_completed = True
+                    st.success(f"查询成功: {fund_info.get('fund_name', '未知基金')}")
+                else:
+                    st.error("未能查询到基金信息，请检查基金代码是否正确")
+                
+                # 重置日期确认状态
+                st.session_state.form_date_confirmed = False
+                st.rerun()
+        except Exception as e:
+            st.error(f"查询基金信息时出错: {str(e)}")
+    
+    # 如果是编辑模式或者已经查询到基金信息
+    is_valid_fund = is_valid_fund or (is_edit and fund_data.get('fund_code')) or 'temp_fund_info' in st.session_state
+    
+    if is_valid_fund:
+        # 如果是新查询的基金信息，使用查询结果；否则使用已有数据
+        fund_name = ""
+        if 'temp_fund_info' in st.session_state:
+            fund_info = st.session_state.temp_fund_info
+            fund_name = fund_info.get('fund_name', '未知基金')
+        else:
+            fund_name = fund_data.get('fund_name', '未知基金')
+        
+        # 显示基金信息卡片
+        st.markdown(f"""
+        <div style="background-color: #e6f7e6; padding: 10px; border-radius: 5px; margin-bottom: 15px;">
+            <div style="font-weight: bold; font-size: 16px;">查询成功: {fund_name}</div>
+            <div style="font-size: 14px; color: #666;">基金代码: {fund_code}</div>
+        </div>
+        """, unsafe_allow_html=True)
+        
+        # 输入购买金额和购买日期
+        col1, col2 = st.columns(2)
+        with col1:
+            purchase_amount = st.number_input(
+                "购买金额 (元)", 
+                min_value=0.01,
+                value=st.session_state.form_purchase_amount,
+                step=100.0,
+                format="%.2f",
+                key="portfolio_purchase_amount",
+                on_change=on_purchase_amount_change
+            )
+        with col2:
+            purchase_date = st.date_input(
+                "购买日期",
+                value=st.session_state.form_purchase_date,
+                key="portfolio_purchase_date",
+                on_change=on_purchase_date_change
+            )
+            
+        # 日期确认和持仓成本单价
+        if not st.session_state.form_date_confirmed:
+            # 如果日期未确认，查询对应日期的净值
+            date_confirm = st.button("确认购买日期", key="confirm_date_button", use_container_width=True)
+            if date_confirm:
+                try:
+                    with st.spinner(f"正在获取 {purchase_date.strftime('%Y-%m-%d')} 的基金净值..."):
+                        # 保存当前输入的购买金额和日期
+                        st.session_state.form_purchase_amount = purchase_amount
+                        st.session_state.form_purchase_date = purchase_date
+                        
+                        df = get_fund_data(fund_code)
+                        # 查找最接近选择日期的净值
+                        df['date'] = pd.to_datetime(df['date'])
+                        date_mask = df['date'] <= pd.to_datetime(purchase_date)
+                        if date_mask.any():
+                            closest_date_record = df[date_mask].iloc[-1]
+                            closest_date = closest_date_record['date'].date()
+                            
+                            # 获取净值（优先使用DWJZ，没有则使用nav）
+                            if 'DWJZ' in closest_date_record:
+                                net_value = float(closest_date_record['DWJZ'])
+                            elif 'nav' in closest_date_record:
+                                net_value = float(closest_date_record['nav'])
+                            else:
+                                net_value = 0
+                            
+                            # 保存持仓成本单价
+                            st.session_state.form_cost_per_unit = net_value
+                            # 设置日期已确认
+                            st.session_state.form_date_confirmed = True
+                            
+                            st.success(f"已获取到 {closest_date.strftime('%Y-%m-%d')} 的净值: {net_value:.4f}")
+                            # 使用st.rerun刷新页面状态
+                            st.rerun()
+                        else:
+                            st.error(f"未找到 {purchase_date.strftime('%Y-%m-%d')} 或之前的基金净值数据")
+                except Exception as e:
+                    st.error(f"获取基金净值时出错: {str(e)}")
+        else:
+            # 如果日期已确认，显示持仓成本单价输入并允许修改
+            st.success(f"购买日期已确认，您可以继续完成设置")
+            cost_per_unit = st.number_input(
+                "持仓成本单价", 
+                min_value=0.0001,
+                value=st.session_state.form_cost_per_unit,
+                step=0.0001,
+                format="%.4f",
+                key="portfolio_cost_per_unit",
+                on_change=on_cost_per_unit_change,
+                help="购买日期对应的基金净值，可手动修改"
+            )
+            
+            # 重置按钮，允许用户重新选择日期
+            if st.button("重新选择日期", key="reset_date_button"):
+                st.session_state.form_date_confirmed = False
+                st.rerun()
+        
+        # 保存或更新按钮，只有在日期确认后才启用
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("取消", key="cancel_button", use_container_width=True):
+                st.session_state.show_edit_form = False
+                st.session_state.edit_fund_index = None
+                st.session_state.query_stage_completed = False
+                
+                # 清除表单状态
+                if 'temp_fund_info' in st.session_state:
+                    del st.session_state.temp_fund_info
+                if 'form_fund_code' in st.session_state:
+                    del st.session_state.form_fund_code
+                if 'form_purchase_amount' in st.session_state:
+                    del st.session_state.form_purchase_amount
+                if 'form_purchase_date' in st.session_state:
+                    del st.session_state.form_purchase_date
+                if 'form_cost_per_unit' in st.session_state:
+                    del st.session_state.form_cost_per_unit
+                if 'form_date_confirmed' in st.session_state:
+                    del st.session_state.form_date_confirmed
+                st.rerun()
+        
+        with col2:
+            save_button = st.button(
+                "保存", 
+                key="save_button", 
+                type="primary", 
+                use_container_width=True,
+                disabled=not st.session_state.form_date_confirmed
+            )
+            
+            if save_button and st.session_state.form_date_confirmed:
+                if not fund_code:
+                    st.error("请输入基金代码")
+                    return
+                
+                if purchase_amount <= 0:
+                    st.error("购买金额必须大于0")
+                    return
+                
+                if st.session_state.form_cost_per_unit <= 0:
+                    st.error("持仓成本单价必须大于0")
+                    return
+                
+                # 获取最新净值
+                try:
+                    with st.spinner("正在获取最新净值..."):
+                        if 'temp_fund_info' in st.session_state:
+                            fund_info = st.session_state.temp_fund_info
+                        else:
+                            fund_info = get_fund_info(fund_code)
+                        
+                        # 获取基金净值数据
+                        df = get_fund_data(fund_code)
+                        latest_data = df.iloc[-1] if not df.empty else None
+                        
+                        if latest_data is None:
+                            st.error("无法获取基金最新净值数据，请稍后再试")
+                            return
+                        
+                        # 计算持仓信息
+                        # 确保DWJZ键存在，如果不存在尝试使用'nav'
+                        net_value = 0
+                        if latest_data is not None:
+                            if 'DWJZ' in latest_data:
+                                net_value = float(latest_data['DWJZ'])
+                            elif 'nav' in latest_data:
+                                net_value = float(latest_data['nav'])
+                        
+                        # 使用持仓成本单价计算份额
+                        cost_per_unit = st.session_state.form_cost_per_unit
+                        shares = purchase_amount / cost_per_unit if cost_per_unit > 0 else 0
+                        current_value = shares * net_value
+                        profit = current_value - purchase_amount
+                        profit_percentage = (profit / purchase_amount * 100) if purchase_amount > 0 else 0
+                        
+                        # 创建或更新基金持仓数据
+                        new_fund_data = {
+                            'fund_code': fund_code,
+                            'fund_name': fund_info.get('fund_name', '未知基金'),
+                            'amount': purchase_amount,
+                            'purchase_date': purchase_date.strftime('%Y-%m-%d'),
+                            'cost_per_unit': cost_per_unit,  # 新增：持仓成本单价
+                            'shares': shares,
+                            'net_value': net_value,
+                            'current_value': current_value,
+                            'profit': profit,
+                            'profit_percentage': profit_percentage,
+                            'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        }
+                        
+                        # 保存数据
+                        if is_edit and fund_index is not None:
+                            st.session_state.portfolio[fund_index] = new_fund_data
+                        else:
+                            if 'portfolio' not in st.session_state:
+                                st.session_state.portfolio = []
+                            st.session_state.portfolio.append(new_fund_data)
+                        
+                        save_portfolio(st.session_state.portfolio)
+                        
+                        # 清理临时状态
+                        st.session_state.show_edit_form = False
+                        st.session_state.edit_fund_index = None
+                        st.session_state.query_stage_completed = False
+                        
+                        # 清除表单状态
+                        if 'temp_fund_info' in st.session_state:
+                            del st.session_state.temp_fund_info
+                        if 'form_fund_code' in st.session_state:
+                            del st.session_state.form_fund_code
+                        if 'form_purchase_amount' in st.session_state:
+                            del st.session_state.form_purchase_amount
+                        if 'form_purchase_date' in st.session_state:
+                            del st.session_state.form_purchase_date
+                        if 'form_cost_per_unit' in st.session_state:
+                            del st.session_state.form_cost_per_unit
+                        if 'form_date_confirmed' in st.session_state:
+                            del st.session_state.form_date_confirmed
+                        
+                        st.success(f"{'更新' if is_edit else '添加'}基金持仓成功！")
+                        st.rerun()
+                except Exception as e:
+                    st.error(f"保存基金持仓时出错: {str(e)}")
+                    import traceback
+                    st.error(traceback.format_exc())
+
+def refresh_portfolio_data():
+    """刷新所有基金持仓的最新数据"""
+    if 'portfolio' not in st.session_state or not st.session_state.portfolio:
+        st.info("没有基金持仓数据可以刷新")
+        return
+    
+    with st.spinner("正在刷新基金持仓数据..."):
+        updated_portfolio = []
+        total_funds = len(st.session_state.portfolio)
+        progress_bar = st.progress(0)
+        
+        for i, fund_item in enumerate(st.session_state.portfolio):
+            try:
+                fund_code = fund_item.get('fund_code')
+                st.write(f"正在更新 ({i+1}/{total_funds}): {fund_code}")
+                
+                # 获取最新的基金信息和净值数据
+                fund_info = get_fund_info(fund_code)
+                df = get_fund_data(fund_code)
+                latest_data = df.iloc[-1] if not df.empty else None
+                
+                if latest_data is not None:
+                    # 更新净值和盈亏信息
+                    # 确保DWJZ键存在，如果不存在尝试使用'nav'
+                    net_value = 0
+                    if 'DWJZ' in latest_data:
+                        net_value = float(latest_data['DWJZ'])
+                    elif 'nav' in latest_data:
+                        net_value = float(latest_data['nav'])
+                    
+                    purchase_amount = fund_item.get('amount', 0)
+                    shares = fund_item.get('shares', 0)
+                    cost_per_unit = fund_item.get('cost_per_unit', 0)
+                    
+                    # 如果有持仓成本单价，但没有份额数据，重新计算份额
+                    if shares == 0 and cost_per_unit > 0:
+                        shares = purchase_amount / cost_per_unit
+                    # 如果没有持仓成本单价，但有份额数据，计算成本单价
+                    elif shares > 0 and cost_per_unit == 0:
+                        cost_per_unit = purchase_amount / shares
+                    # 如果两者都没有，并且有净值数据，使用净值计算
+                    elif shares == 0 and cost_per_unit == 0 and net_value > 0:
+                        shares = purchase_amount / net_value
+                        cost_per_unit = net_value
+                    
+                    current_value = shares * net_value
+                    profit = current_value - purchase_amount
+                    profit_percentage = (profit / purchase_amount * 100) if purchase_amount > 0 else 0
+                    
+                    # 更新基金数据
+                    updated_fund = fund_item.copy()
+                    updated_fund.update({
+                        'fund_name': fund_info.get('fund_name', fund_item.get('fund_name', '未知基金')),
+                        'net_value': net_value,
+                        'shares': shares,
+                        'cost_per_unit': cost_per_unit,  # 保留持仓成本单价
+                        'current_value': current_value,
+                        'profit': profit,
+                        'profit_percentage': profit_percentage,
+                        'update_time': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                    })
+                    updated_portfolio.append(updated_fund)
+                else:
+                    # 如果获取不到最新数据，保留原数据
+                    updated_portfolio.append(fund_item)
+                
+                # 更新进度
+                progress_bar.progress((i + 1) / total_funds)
+                
+            except Exception as e:
+                st.error(f"刷新基金 {fund_code} 时出错: {str(e)}")
+                # 保留原有数据
+                updated_portfolio.append(fund_item)
+                # 更新进度
+                progress_bar.progress((i + 1) / total_funds)
+        
+        # 完成进度条
+        progress_bar.progress(1.0)
+        
+        # 更新session_state中的数据
+        st.session_state.portfolio = updated_portfolio
+        # 保存到文件
+        save_portfolio(updated_portfolio)
+        st.success("基金持仓数据更新完成！")
+        st.rerun()
