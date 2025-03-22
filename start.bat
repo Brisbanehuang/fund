@@ -14,6 +14,22 @@ if %errorlevel% neq 0 (
     exit /b 1
 )
 
+REM 检查pip是否可用
+where pip >nul 2>nul 
+if %errorlevel% neq 0 (
+    echo [错误] 未检测到pip工具，请确保Python安装正确。
+    pause
+    exit /b 1
+)
+
+REM 检查Python版本是否满足要求
+python -c "import sys; sys.exit(0 if sys.version_info >= (3,8) else 1)" >nul 2>nul
+if %errorlevel% neq 0 (
+    echo [错误] Python版本过低，请安装Python 3.8或更高版本。
+    pause
+    exit /b 1
+)
+
 echo 正在尝试启动基金分析工具...
 echo 请稍候，应用程序窗口即将打开...
 echo.
