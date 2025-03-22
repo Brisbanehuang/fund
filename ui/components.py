@@ -588,7 +588,8 @@ def display_portfolio_summary(portfolio_data):
             value=f"¥{total_current_value:.2f}",
         )
     with col3:
-        profit_color = "normal" if total_profit >= 0 else "inverse"
+        # 修改颜色逻辑：盈利为红色，亏损为绿色
+        profit_color = "inverse" if total_profit >= 0 else "normal"
         profit_sign = "+" if total_profit >= 0 else ""
         st.metric(
             label="总盈亏", 
