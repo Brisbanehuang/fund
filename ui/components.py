@@ -588,15 +588,20 @@ def display_portfolio_summary(portfolio_data):
             value=f"¥{total_current_value:.2f}",
         )
     with col3:
-        # 修改颜色逻辑：盈利为红色，亏损为绿色
-        profit_color = "inverse" if total_profit >= 0 else "normal"
+        # 使用与基金卡片相同的HTML样式逻辑
         profit_sign = "+" if total_profit >= 0 else ""
-        st.metric(
-            label="总盈亏", 
-            value=f"¥{total_profit:.2f}",
-            delta=f"{profit_sign}{profit_percentage:.2f}%",
-            delta_color=profit_color
-        )
+        profit_color = "red" if total_profit >= 0 else "green"
+        
+        # 使用Markdown和HTML实现自定义样式
+        st.markdown(f"""
+        <div style="padding: 10px 0;">
+            <div style="color: rgba(38, 39, 48, 0.8); font-size: 14px; margin-bottom: 4px;">总盈亏</div>
+            <div style="font-size: 20px; font-weight: 500;">¥{total_profit:.2f}</div>
+            <div style="color: {profit_color}; margin-top: 4px;">
+                {profit_sign}{profit_percentage:.2f}%
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
 
 def display_fund_card(fund_item, index, refresh_callback):
     """显示单个基金持仓卡片"""
@@ -617,7 +622,7 @@ def display_fund_card(fund_item, index, refresh_callback):
                 <div>当前价值: ¥{fund_item.get('current_value', 0):.2f}</div>
             </div>
             <div class="info-row">
-                <div style="color: {'green' if fund_item.get('profit', 0) >= 0 else 'red'}">
+                <div style="color: {'red' if fund_item.get('profit', 0) >= 0 else 'green'}">
                     盈亏: {'+'if fund_item.get('profit', 0) >= 0 else ''}{fund_item.get('profit', 0):.2f} 
                     ({'+'if fund_item.get('profit_percentage', 0) >= 0 else ''}{fund_item.get('profit_percentage', 0):.2f}%)
                 </div>
