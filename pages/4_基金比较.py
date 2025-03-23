@@ -16,6 +16,7 @@ sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from ui.components import load_css
 from ui.other_pages import fund_compare_page
 from src.fund_data import get_fund_data, get_fund_info
+from ui.pages import load_favorite_funds
 
 # 加载CSS样式
 load_css()
@@ -42,12 +43,23 @@ if 'fund_code' not in st.session_state:
     st.session_state.fund_code = ''
 if 'fund_data' not in st.session_state:
     st.session_state.fund_data = None
-if 'favorite_funds' not in st.session_state:
-    st.session_state.favorite_funds = {}
+
+# 确保每次加载页面时都从文件加载最新的自选基金数据
+favorite_funds = load_favorite_funds()
+st.session_state.favorite_funds = favorite_funds
+print(f"已加载自选基金数据，共 {len(favorite_funds)} 支基金")
+
 if 'current_view' not in st.session_state:
     st.session_state.current_view = None
 if 'show_toast' not in st.session_state:
     st.session_state.show_toast = None
+# 基金比较页面相关的session state
+if 'compare_funds' not in st.session_state:
+    st.session_state.compare_funds = ["", ""]
+if 'compare_start_date' not in st.session_state:
+    st.session_state.compare_start_date = None
+if 'compare_end_date' not in st.session_state:
+    st.session_state.compare_end_date = None
 
 # 显示提示信息
 if st.session_state.show_toast:

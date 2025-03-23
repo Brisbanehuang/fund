@@ -20,7 +20,7 @@ echo Python version detected: %pyver%
 
 echo.
 echo ==========================================
-echo             Fund Analysis Tool v2.0
+echo             Fund Analysis Tool v2.1.1
 echo ==========================================
 echo.
 echo  * Query: http://localhost:8501/基金查询
