@@ -1,63 +1,68 @@
 @echo off
-chcp 65001 >nul
-echo ===================================
-echo    基金管理分析工具 - 启动程序
-echo ===================================
-echo.
+chcp 65001
+setlocal enabledelayedexpansion
 
-echo 正在检查Python环境...
+title Fund Analysis Tool
+
+echo Checking Python environment...
 where python >nul 2>nul
 if %errorlevel% neq 0 (
-    echo [错误] 未检测到Python环境，请安装Python 3.8或更高版本。
-    echo 您可以从 https://www.python.org/downloads/ 下载安装。
+    color 4F
+    echo Error: Python not found. Please make sure Python is installed and added to PATH.
+    echo You can download Python from https://www.python.org/downloads/
+    echo.
     pause
     exit /b 1
 )
 
-REM 检查pip是否可用
-where pip >nul 2>nul 
-if %errorlevel% neq 0 (
-    echo [错误] 未检测到pip工具，请确保Python安装正确。
-    pause
-    exit /b 1
-)
+for /f "tokens=2" %%i in ('python --version 2^>^&1') do set pyver=%%i
+echo Python version detected: %pyver%
 
-REM 检查Python版本是否满足要求
-python -c "import sys; sys.exit(0 if sys.version_info >= (3,8) else 1)" >nul 2>nul
-if %errorlevel% neq 0 (
-    echo [错误] Python版本过低，请安装Python 3.8或更高版本。
-    pause
-    exit /b 1
-)
-
-echo 正在尝试启动基金分析工具...
-echo 请稍候，应用程序窗口即将打开...
+echo.
+echo ==========================================
+echo             Fund Analysis Tool v2.0
+echo ==========================================
+echo.
+echo  * Query: http://localhost:8501/基金查询
+echo  * Favorites: http://localhost:8501/自选基金
+echo  * Portfolio: http://localhost:8501/基金持仓
+echo  * Compare: http://localhost:8501/基金比较
+echo  * Investment Plan: http://localhost:8501/基金投资计划
+echo  * More Features: http://localhost:8501/待开发
+echo ==========================================
 echo.
 
-
-streamlit run main.py
-
-if %errorlevel% neq 0 (
-    echo [错误] 程序启动失败，尝试安装依赖...
-    
-    echo 正在安装依赖...
-    pip install -r requirements.txt --no-build-isolation
-    
-    if %errorlevel% neq 0 (
-        echo [警告] 依赖安装可能不完整，程序可能无法正常运行。
-        echo 请尝试手动执行以下命令安装预编译的二进制包:
-        echo pip install --only-binary=:all: -r requirements.txt
-        pause
-    ) else (
-        echo 依赖安装完成！尝试再次启动程序...
-        streamlit run main.py
-        
-        if %errorlevel% neq 0 (
-            echo [错误] 程序再次启动失败，请检查错误信息。
-            pause
-        )
-    )
+if not exist requirements.txt (
+    echo Error: requirements.txt file not found.
+    pause
+    exit /b 1
 )
 
-rem 确保命令行窗口不会立即关闭
+echo.
+echo Starting Fund Analysis Tool...
+echo After startup, access the application at http://localhost:8501
+echo.
+echo Tips:
+echo - Closing this window will terminate the application
+echo - First-time fund data queries may be slow
+echo.
+
+REM 先尝试直接启动应用
+python -m streamlit run main.py
+set start_result=%errorlevel%
+
+REM 如果启动失败，尝试安装依赖后再运行
+if %start_result% neq 0 (
+    echo.
+    echo Application startup failed. Installing dependencies...
+    python -m pip install --upgrade pip --quiet
+    python -m pip install -r requirements.txt --quiet
+    echo Dependencies installed successfully.
+    echo.
+    echo Trying to start the application again...
+    python -m streamlit run main.py
+)
+
+echo.
+echo Application closed.
 pause

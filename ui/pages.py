@@ -29,26 +29,12 @@ def save_favorite_funds():
     with open(FAVORITE_FUNDS_FILE, 'w', encoding='utf-8') as f:
         json.dump(st.session_state.favorite_funds, f, ensure_ascii=False)
 
-def show_fund_detail_popup(fund_code):
-    """显示基金详情弹窗"""
-    st.session_state.show_detail_popup = True
+def view_fund_detail(fund_code):
+    """查看基金详情（导航到基金详情页面）"""
+    # 使用detail参数导航到自选基金页面并显示详情
+    st.query_params["detail"] = fund_code
+    st.session_state.show_fund_detail = True
     st.session_state.detail_fund_code = fund_code
-    st.session_state.fund_data = None
-    
-    # 更新基金信息（无论是否为自选基金）
-    try:
-        # 获取最新的基金信息
-        fund_info = get_fund_info(fund_code)
-        last_update_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-        
-        # 如果是自选基金，更新其信息
-        if fund_code in st.session_state.favorite_funds:
-            st.session_state.favorite_funds[fund_code]['fund_info'] = fund_info
-            st.session_state.favorite_funds[fund_code]['last_update'] = last_update_time
-            save_favorite_funds()
-    except Exception as e:
-        print(f"更新基金信息时发生错误: {str(e)}")
-    
     st.rerun()
 
 def fund_query_page():
@@ -66,8 +52,7 @@ def fund_query_page():
                 st.session_state.fund_code = st.session_state.previous_fund_code
                 st.session_state.previous_fund_code = None
                 st.session_state.current_view = None
-                st.session_state.nav_option = "自选基金"
-                st.rerun()
+                st.switch_page("pages/2_自选基金.py")
             st.markdown("<br>", unsafe_allow_html=True)
         
         # 输入基金代码
@@ -206,6 +191,15 @@ def favorite_funds_page():
             refresh_favorite_funds()
             st.rerun()
     
+    # 隐藏警告信息
+    st.markdown("""
+    <style>
+    .stException, .stWarning {
+        display: none;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    
     if not st.session_state.favorite_funds:
         st.info("您还没有添加任何自选基金，请在基金查询页面添加。")
     else:
@@ -262,8 +256,8 @@ def favorite_funds_page():
                             col1, col2 = st.columns(2)
                             with col1:
                                 if st.button("查看详情", key=f"view_{fund_code}"):
-                                    # 打开详情弹窗
-                                    show_fund_detail_popup(fund_code)
+                                    # 导航到基金详情页面，传递基金代码作为查询参数
+                                    view_fund_detail(fund_code)
                             with col2:
                                 if st.button("移出自选", key=f"remove_{fund_code}"):
                                     del st.session_state.favorite_funds[fund_code]

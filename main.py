@@ -1,7 +1,6 @@
 import streamlit as st
 import sys
 import os
-import json
 from datetime import datetime
 
 # 设置页面配置
@@ -13,108 +12,190 @@ st.set_page_config(
 
 # 导入UI模块
 from ui.components import load_css
-from ui.pages import fund_query_page, favorite_funds_page, load_favorite_funds, show_fund_detail_popup
-from ui.portfolio_page import portfolio_page
-from ui.other_pages import fund_compare_page, fund_investment_plan_page, more_features_page
+from ui.pages import load_favorite_funds
 
 # 加载CSS样式
 load_css()
 
 # 初始化session state
-if 'fund_code' not in st.session_state:
-    st.session_state.fund_code = ''
-if 'fund_data' not in st.session_state:
-    st.session_state.fund_data = None
-if 'start_date' not in st.session_state:
-    st.session_state.start_date = None
-if 'end_date' not in st.session_state:
-    st.session_state.end_date = None
 if 'favorite_funds' not in st.session_state:
     st.session_state.favorite_funds = {}
-if 'current_view' not in st.session_state:
-    st.session_state.current_view = None
-if 'previous_fund_code' not in st.session_state:
-    st.session_state.previous_fund_code = None
 if 'show_toast' not in st.session_state:
     st.session_state.show_toast = None
-if 'show_detail_popup' not in st.session_state:
-    st.session_state.show_detail_popup = False
-if 'detail_fund_code' not in st.session_state:
-    st.session_state.detail_fund_code = None
 
 # 加载自选基金数据
 if len(st.session_state.favorite_funds) == 0:
     st.session_state.favorite_funds = load_favorite_funds()
-
-# 侧边栏导航
-st.sidebar.markdown("# 📊 基金分析工具")
-st.sidebar.markdown("---")
-
-# 导航选项
-selected_nav = st.sidebar.radio(
-    "功能导航",
-    ["基金查询", "自选基金", "基金持仓", "基金比较", "基金投资计划", "待开发"]
-)
-
-# 处理导航逻辑
-if selected_nav != "基金查询" and st.session_state.current_view == "fund_query_from_favorite":
-    # 如果从自选基金跳转来的，且用户点击了其他导航，恢复之前的基金代码
-    if st.session_state.previous_fund_code:
-        st.session_state.fund_code = st.session_state.previous_fund_code
-        st.session_state.previous_fund_code = None
-    st.session_state.current_view = None
-
-# 如果切换到基金查询功能，自动关闭自选基金卡片
-if selected_nav == "基金查询":
-    st.session_state.show_detail_popup = False
-    st.session_state.detail_fund_code = None
-
-nav_option = selected_nav
 
 # 显示提示信息
 if st.session_state.show_toast:
     st.toast(st.session_state.show_toast["message"], icon=st.session_state.show_toast["icon"])
     st.session_state.show_toast = None
 
-# 检查是否需要显示基金详情弹窗
-if st.session_state.show_detail_popup and st.session_state.detail_fund_code:
-    # 创建详情容器
-    detail_container = st.container()
-    with detail_container:
-        st.subheader("基金详情")
-        # 获取基金数据
-        try:
-            from src.fund_data import get_fund_data, get_fund_info
-            with st.spinner("正在获取基金数据..."):
-                df = get_fund_data(st.session_state.detail_fund_code)
-                fund_info = get_fund_info(st.session_state.detail_fund_code)
-                
-            if not df.empty:
-                # 显示基金分析内容
-                from ui.components import display_fund_analysis
-                display_fund_analysis(df, fund_info)
-            else:
-                st.error("未能获取到基金数据，请检查基金代码是否正确。")
-                
-        except Exception as e:
-            st.error(f"发生错误: {str(e)}")
-            
-        # 添加关闭按钮
-        if st.button("关闭", key="close_detail_popup"):
-            st.session_state.show_detail_popup = False
-            st.session_state.detail_fund_code = None
-            st.rerun()
+# 主页内容
+st.markdown("<h1 style='text-align: center; margin-top: 2rem;'>📊 基金分析工具</h1>", unsafe_allow_html=True)
+st.markdown("<p style='text-align: center; font-size: 1.2rem;'>一站式基金分析与管理平台</p>", unsafe_allow_html=True)
 
-# 主界面内容
-if nav_option == "基金查询":
-    fund_query_page()
-elif nav_option == "自选基金":
-    favorite_funds_page()
-elif nav_option == "基金持仓":
-    portfolio_page()
-elif nav_option == "基金比较":
-    fund_compare_page()
-elif nav_option == "基金投资计划":
-    fund_investment_plan_page()
-else:  # 待开发
-    more_features_page()
+# 修改侧边栏名称
+st.markdown("""
+<style>
+    /* 使用更精确的选择器确保修改"main"为"主页" */
+    [data-testid="stSidebarNav"] li:first-child span {
+        visibility: hidden;
+        position: relative;
+    }
+    [data-testid="stSidebarNav"] li:first-child span::after {
+        content: "主页";
+        visibility: visible;
+        position: absolute;
+        left: 0;
+    }
+    /* 确保侧边栏始终可见 */
+    [data-testid="stSidebar"] {
+        display: block !important;
+    }
+    /* 首页卡片样式 */
+    .feature-container {
+        display: flex;
+        flex-wrap: wrap;
+        justify-content: center;
+        gap: 1.5rem;
+        margin-top: 2rem;
+    }
+    .feature-card {
+        background-color: white;
+        border-radius: 10px;
+        padding: 1.5rem;
+        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        width: 280px;
+        transition: transform 0.3s, box-shadow 0.3s;
+        text-align: center;
+    }
+    .feature-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 20px rgba(0, 0, 0, 0.15);
+    }
+    .feature-icon {
+        font-size: 2.5rem;
+        margin-bottom: 1rem;
+    }
+    .feature-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        margin-bottom: 0.5rem;
+    }
+    .feature-description {
+        color: #666;
+        font-size: 0.9rem;
+    }
+    .center-btn {
+        display: flex;
+        justify-content: center;
+        margin-top: 0.5rem;
+    }
+    .stMarkdown pre {
+        display: none;  /* 隐藏代码框 */
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# 创建两行功能卡片
+col1, col2, col3 = st.columns(3)
+
+with col1:
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-icon">🔍</div>
+        <div class="feature-title">基金查询</div>
+        <p class="feature-description">查询基金详情、历史净值、业绩表现及风险评估</p>
+        <div class="center-btn">
+            <a href="/基金查询" target="_self">
+                <button style="background-color: #4CAF50; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">立即查询</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+with col2:
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-icon">⭐</div>
+        <div class="feature-title">自选基金</div>
+        <p class="feature-description">管理您关注的基金，快速查看最新动态和表现</p>
+        <div class="center-btn">
+            <a href="/自选基金" target="_self">
+                <button style="background-color: #2196F3; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">前往自选</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+with col3:
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-icon">📈</div>
+        <div class="feature-title">基金持仓</div>
+        <p class="feature-description">记录您的基金持仓情况，分析投资组合表现</p>
+        <div class="center-btn">
+            <a href="/基金持仓" target="_self">
+                <button style="background-color: #FF9800; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">管理持仓</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# 添加垂直间距
+st.markdown("<div style='height: 30px;'></div>", unsafe_allow_html=True)
+
+# 第二行功能卡片  
+col4, col5, col6 = st.columns(3)
+
+with col4:
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-icon">🔄</div>
+        <div class="feature-title">基金比较</div>
+        <p class="feature-description">多基金对比分析，助您找出最适合的投资标的</p>
+        <div class="center-btn">
+            <a href="/基金比较" target="_self">
+                <button style="background-color: #9C27B0; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">开始对比</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+with col5:
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-icon">📆</div>
+        <div class="feature-title">投资计划</div>
+        <p class="feature-description">制定基金定投计划，模拟不同策略的投资收益</p>
+        <div class="center-btn">
+            <a href="/基金投资计划" target="_self">
+                <button style="background-color: #E91E63; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">规划投资</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+    
+with col6:
+    st.markdown("""
+    <div class="feature-card">
+        <div class="feature-icon">🚀</div>
+        <div class="feature-title">更多功能</div>
+        <p class="feature-description">探索更多正在开发的高级功能和分析工具</p>
+        <div class="center-btn">
+            <a href="/待开发" target="_self">
+                <button style="background-color: #607D8B; color: white; border: none; padding: 8px 16px; border-radius: 4px; cursor: pointer;">了解更多</button>
+            </a>
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# 页脚
+st.markdown("""
+<div style='text-align: center; margin-top: 4rem; padding: 1rem; color: #666; font-size: 0.8rem;'>
+    <p>© 2024 基金分析工具 | 当前版本: 2.0.0</p>
+    <p>本工具仅供学习和参考，不构成任何投资建议</p>
+</div>
+""", unsafe_allow_html=True)
