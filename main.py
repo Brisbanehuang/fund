@@ -195,7 +195,7 @@ with col6:
 # 页脚
 st.markdown("""
 <div style='text-align: center; margin-top: 4rem; padding: 1rem; color: #666; font-size: 0.8rem;'>
-    <p>© 2025 基金分析工具 | 当前版本: 2.1.1</p>
+    <p>© 2025 基金分析工具 | 制作者：Brisbane Huang | 当前版本: 2.1.1</p>
     <p>本工具仅供学习和参考，不构成任何投资建议</p>
 </div>
 """, unsafe_allow_html=True)
